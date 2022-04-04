@@ -8173,7 +8173,7 @@
   const edgeToStr = (e) => e.stringID();
 
   // Copyright 2015 the V8 project authors. All rights reserved.
-  const DEFAULT_NODE_ROW_SEPARATION = 150;
+  const DEFAULT_NODE_ROW_SEPARATION = 180;
   function newGraphOccupation(graph) {
       const isSlotFilled = [];
       let nodeOccupation = [];
