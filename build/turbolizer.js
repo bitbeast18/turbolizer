@@ -8077,6 +8077,12 @@
 
   // Copyright 2014 the V8 project authors. All rights reserved.
   const MINIMUM_EDGE_SEPARATION = 20;
+  var EdgeType;
+  (function (EdgeType) {
+      EdgeType["CurvedAvoid"] = "curved-avoid";
+      EdgeType["CurvedSimple"] = "curved-simple";
+      EdgeType["Rectangular"] = "rectangular";
+  })(EdgeType || (EdgeType = {}));
   class Edge {
       constructor(target, index, source, type) {
           this.target = target;
@@ -8114,7 +8120,7 @@
                   : (target.x - inputOffset);
           }
       }
-      generatePath(graph, showTypes) {
+      generatePath(graph, edgeType, showTypes) {
           const target = this.target;
           const source = this.source;
           const inputX = target.x + target.getInputX(this.index);
@@ -8140,9 +8146,25 @@
           }
           result.push([inputX, inputApproach]);
           result.push([inputX, inputY]);
-          return this.isBackEdge()
-              ? this.rectangularLineGen(result)
-              : this.curvedLineGen(result);
+          if (this.isBackEdge()) {
+              return this.rectangularLineGen(result);
+          }
+          else {
+              switch (edgeType) {
+                  case EdgeType.CurvedAvoid:
+                      return this.curvedLineGen(result);
+                  case EdgeType.CurvedSimple:
+                      const controlY = outputY + (inputY - outputY) * 0.3;
+                      return `M ${outputX} ${outputY}
+                              C ${outputX} ${controlY},
+                                ${inputX} ${outputY},
+                                ${inputX} ${inputY}`;
+                  case EdgeType.Rectangular:
+                      return this.rectangularLineGen(result);
+                  default:
+                      throw new Error(`Unexpected value ${edgeType}`);
+              }
+          }
       }
       isBackEdge() {
           return this.target.hasBackEdges() && (this.target.rank < this.source.rank);
@@ -8151,7 +8173,7 @@
   const edgeToStr = (e) => e.stringID();
 
   // Copyright 2015 the V8 project authors. All rights reserved.
-  const DEFAULT_NODE_ROW_SEPARATION = 180;
+  const DEFAULT_NODE_ROW_SEPARATION = 150;
   function newGraphOccupation(graph) {
       const isSlotFilled = [];
       let nodeOccupation = [];
@@ -8637,6 +8659,7 @@
           this.showPhaseByName = showPhaseByName;
           this.divElement = select(this.divNode);
           this.phaseName = "";
+          this.edgeType = EdgeType.CurvedAvoid;
           this.toolbox = toolbox;
           const svg$$1 = this.divElement.append("svg")
               .attr('version', '2.0')
@@ -9415,7 +9438,7 @@
           view.updateInputAndOutputBubbles();
           graph.maxGraphX = graph.maxGraphNodeX;
           newAndOldEdges.attr("d", function (edge) {
-              return edge.generatePath(graph, view.state.showTypes);
+              return edge.generatePath(graph, view.edgeType, view.state.showTypes);
           });
       }
       getSvgViewDimensions() {
@@ -10758,6 +10781,11 @@
   <select id="phase-select">
     <option disabled selected>(please open a file)</option>
   </select>
+  <select id="edge-type">
+    <option value="curved-avoid" selected> Curve with node avoidance </option>
+    <option value="curved-simple"> Simple X to Y smooth curve </option>
+    <option value="rectangular"> Rectangular Lines </option>
+  </select>
   <input id="search-input" type="text" title="search nodes for regex" alt="search node for regex" class="search-input"
     placeholder="find with regexp&hellip;">
   <label><input id="search-only-visible" type="checkbox" name="instruction-address" alt="Apply search to visible nodes only">only visible</label>
@@ -10806,6 +10834,7 @@
           this.schedule = new ScheduleView(this.divNode, selectionBroker);
           this.sequence = new SequenceView(this.divNode, selectionBroker);
           this.selectMenu = toolbox.querySelector("#phase-select");
+          this.selectEdgeTypeMenu = toolbox.querySelector("#edge-type");
       }
       initializeSelect() {
           const view = this;
@@ -10823,6 +10852,10 @@
               const phaseIndex = this.selectedIndex;
               window.sessionStorage.setItem("lastSelectedPhase", phaseIndex.toString());
               view.displayPhase(view.sourceResolver.getPhase(phaseIndex));
+          };
+          this.selectEdgeTypeMenu.onchange = function () {
+              view.graph.edgeType = this.value;
+              view.graph.updateGraphVisibility();
           };
       }
       show() {
